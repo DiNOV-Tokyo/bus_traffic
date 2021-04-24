@@ -1,0 +1,172 @@
+---
+title: "Bus Trrafic in Japan"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: cerulean
+date: "`r Sys.Date()`"
+runitime: shiny
+---
+
+```{r setup, include=FALSE}
+
+library(flexdashboard)
+library(tidyverse)
+library(leaflet)  
+library(crosstalk)  
+library(RColorBrewer)
+library(readr)
+library(ggplot2)
+library(DT)
+library(curl)
+
+```
+
+
+```{r data, message=FALSE, echo=FALSE, warning=FALSE}
+
+req <- curl_fetch_memory("https://api.odpt.org/api/v4/odpt:Bus?odpt:operator=odpt.Operator:SeibuBus&acl:consumerKey=c1f315c808022db68eb65b5221764083a2964e2da068ecff8f944c233afe96b7")
+#jsonlite::prettify(rawToChar(req$content))
+bus.data.json <- jsonlite::fromJSON(jsonlite::prettify(rawToChar(req$content)))
+
+rnum<-nrow(bus.data.json)
+
+bus_dat <- bus.data.json  %>% 
+  select(lat=`geo:lat`, lng=`geo:long`) %>% 
+  mutate(id=c(1:rnum), race=rep(c("A", "A", "B"), length=rnum),  bus_num=rep(c(1:5), length=rnum) ) %>% 
+  drop_na()
+
+sd <- SharedData$new(bus_dat)
+
+pal <- colorFactor(
+#  palette = 'Spectral',
+  palette = c("blue", "red"),
+  domain = bus_dat$race
+)
+
+sd %>% 
+  leaflet() %>%
+  setView(lng = 139.5, lat = 35.8 , zoom = 11) %>% 
+  addTiles() %>%
+  addCircleMarkers(lng = ~lng, lat = ~lat, weight = 3, color = ~pal(race),
+                   stroke = TRUE, fillOpacity = 0.5, 
+                   #radius = 10,
+                   radius = ~ifelse(race == "A", 6, 10),
+                   popup = ~paste0("<h5>", bus_dat$id, "</h5>",
+                                   
+                                   
+                                   "<table style='width:100%'>",
+                                   
+                                   "<tr>",
+                                   "<tr>",
+                                   "<th>Number</th>",
+                                   "<th>", bus_dat$bus_num, "</th>",
+                                   "</tr>"
+                                   
+                   )) %>%
+  addLegend("bottomleft", pal = pal, values = ~race,
+            title = "Bus",
+#            labFormat = labelFormat(prefix = "$"),
+            opacity = 1
+  ) -> map
+
+
+DT::datatable(
+  filter = "top",
+  head(bus_dat, 3000), 
+  options = list(
+  columnDefs = list(list(className = 'dt-center', targets = c(2:5))),
+  pageLength = 100,
+#  lengthMenu = c(100, 250, 500, 1000),
+#  initComplete = JS(
+#    "function(settings, json) {",
+#    "$(this.api().table().header()).css({'background-color': '#FFFFE0', 'color': '#000'});",
+#    "}"),
+  (searchHighlight = TRUE)
+)) -> data_table
+
+```
+
+
+
+
+Overview
+===================================== 
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Map
+
+```{r map}
+map
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Filters
+
+```{r filters}
+
+filter_select(
+  id = "Race",
+  label = "Race",
+  sharedData = sd,
+  group = ~race
+)
+
+
+
+```
+
+Data
+===================================== 
+
+### Data table
+
+```{r}
+data_table
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+###Bus data scraped with curl
+
+Data was scraped with curl command run by R.
+
+
+
+
+
+Information {data-orientation=rows data-icon="fa-info-circle"}
+===================================== 
+
+### Data information
+
+The data used here is taken from 公共交通オープンデータセンター[Public Transportation Open Data Center: Fatal Force](https://www.odpt.org/) website which provides open source data related to transportation in Japan. 
+With using dedicated APIs, you can enjoy the data scraping for analysis.
+
+Before you use it, you have to subscribe to take the key  [here](https://developer.odpt.org/users/sign_up).
+
+
+
+### Background
+Public trasnportation data is useful to learn the data analysis.
+
+
+### Other information
+This dashboard was developed by DiNOV on 24th April 2021.
+
+This dashbaord was developed using [R Studio](https://www.rstudio.com/) and the following packages:
+
+* [RMarkdown](https://rmarkdown.rstudio.com/) for reproducable analysis in quality documents
+*  [flexdashbaord](https://rmarkdown.rstudio.com/flexdashboard/) for formatting in RMarkdown
+* [DT](https://rstudio.github.io/DT/) for interactive tables
+* [crosstalk](https://rstudio.github.io/crosstalk/) for interactive html widgets in RMarkdown
+
+
+Thanks to Matt Dray for the [excellent guidence](https://github.com/matt-dray/earl18-crosstalk).
+```
